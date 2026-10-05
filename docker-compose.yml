@@ -1,0 +1,38 @@
+name: hr-xsoft
+
+services:
+  mariadb:
+    image: mariadb:11.8
+    container_name: hr-xsoft-mariadb
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: laravel
+      MARIADB_USER: laravel
+      MARIADB_PASSWORD: laravel
+      MARIADB_ROOT_PASSWORD: laravel-root
+    ports:
+      - "127.0.0.1:3307:3306"
+    volumes:
+      - hr-xsoft-db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  phpmyadmin:
+    image: phpmyadmin:5
+    container_name: hr-xsoft-phpmyadmin
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    environment:
+      PMA_HOST: mariadb
+      PMA_PORT: 3306
+      UPLOAD_LIMIT: 64M
+    ports:
+      - "127.0.0.1:8080:80"
+
+volumes:
+  hr-xsoft-db:
