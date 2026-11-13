@@ -18,4 +18,22 @@ class Lookup extends Model
             'meta' => 'array',
         ];
     }
+
+    /**
+     * İzin tipinde onay bakiyeden düşer mi. Ayarı olmayan eski kayıt düşer sayılır.
+     */
+    public function tracksBalance(): bool
+    {
+        return (bool) ($this->meta['balance'] ?? true);
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function leaveUnits(): array
+    {
+        $unit = $this->meta['unit'] ?? 'both';
+
+        return $unit === 'both' ? ['day', 'hour'] : [$unit];
+    }
 }

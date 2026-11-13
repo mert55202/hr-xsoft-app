@@ -20,6 +20,25 @@ services:
       timeout: 5s
       retries: 20
 
+  app:
+    build: .
+    container_name: hr-xsoft-app
+    restart: unless-stopped
+    user: "1000:1000"
+    working_dir: /var/www/html
+    volumes:
+      - .:/var/www/html
+    environment:
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      APP_URL: http://127.0.0.1:8010
+    ports:
+      - "127.0.0.1:8010:8000"
+    command: ["sh", "-c", "cd /var/www/html/public && exec php -S 0.0.0.0:8000 -t /var/www/html/public /var/www/html/vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php"]
+    depends_on:
+      mariadb:
+        condition: service_healthy
+
   phpmyadmin:
     image: phpmyadmin:5
     container_name: hr-xsoft-phpmyadmin

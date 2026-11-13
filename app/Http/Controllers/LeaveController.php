@@ -90,6 +90,36 @@ class LeaveController extends Controller
         return back()->with('status', 'İzin talebi açıldı.');
     }
 
+    public function balances(Request $request, Employee $employee): RedirectResponse
+    {
+        abort_unless($request->user()->isAdmin(), 403);
+
+        $data = $request->validate([
+            'balances' => ['nullable', 'array'],
+            'balances.*' => ['array'],
+            'balances.*.*' => ['nullable', 'numeric', 'min:0', 'max:999'],
+        ], [], ['balances.*.*' => 'bakiye']);
+
+        $types = Lookup::query()->where('kind', 'leave_type')->get()->filter->tracksBalance();
+
+        foreach ($types as $type) {
+            foreach ($type->leaveUnits() as $unit) {
+                $amount = $data['balances'][$type->id][$unit] ?? null;
+                $match = ['employee_id' => $employee->id, 'lookup_id' => $type->id, 'unit' => $unit];
+
+                if ($amount === null || $amount === '') {
+                    LeaveBalance::query()->where($match)->delete();
+
+                    continue;
+                }
+
+                LeaveBalance::query()->updateOrCreate($match, ['amount' => round((float) $amount, 2)]);
+            }
+        }
+
+        return back()->with('status', 'İzin bakiyesi yazıldı.');
+    }
+
     public function update(Request $request, LeaveRequest $leave, LeaveDecider $decider): RedirectResponse
     {
         $data = $request->validate([

@@ -31,9 +31,20 @@
             <div class="col-md-2 d-flex align-items-end">
                 <button class="btn btn-primary" type="submit">Ekle</button>
             </div>
+            <div class="col-12">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="balance" value="1" id="balance">
+                    <label class="form-check-label" for="balance">İzin tipiyse onayda bakiyeden düşer</label>
+                </div>
+            </div>
         </div>
     </form>
     @foreach ($rows as $row)
-        <p class="mb-1">{{ $kinds[$row->kind] ?? $row->kind }} · {{ $row->name }}</p>
+        <p class="mb-1">
+            {{ $kinds[$row->kind] ?? $row->kind }} · {{ $row->name }}
+            @if ($row->kind === 'leave_type')
+                <span class="text-secondary">· {{ $row->tracksBalance() ? 'bakiyeden düşer' : 'bakiyesiz' }}</span>
+            @endif
+        </p>
     @endforeach
 @endsection

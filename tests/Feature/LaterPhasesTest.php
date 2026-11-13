@@ -31,6 +31,7 @@ use App\Support\LookupKind;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -57,6 +58,38 @@ class LaterPhasesTest extends TestCase
             'hidden_modules' => [AppModule::Training->value],
         ])->assertSessionHasErrors('hidden_modules');
         $this->assertSame([AppModule::Survey->value], $staff->user->fresh()->hidden_modules);
+    }
+
+    public function test_a_login_is_opened_for_personnel_and_its_password_changed(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $department = Department::factory()->create();
+        $position = Position::factory()->create(['department_id' => $department->id]);
+        $employee = Employee::factory()->create(['first_name' => 'Can', 'last_name' => 'Yıldız', 'position_id' => $position->id, 'user_id' => null]);
+
+        $this->actingAs($admin)->put('/personel/'.$employee->id.'/hesap', [
+            'account_email' => 'can@example.test',
+        ])->assertSessionHasErrors('password');
+
+        $this->actingAs($admin)->put('/personel/'.$employee->id.'/hesap', [
+            'account_email' => 'can@example.test',
+            'password' => 'ilk-sifre-1',
+            'password_confirmation' => 'ilk-sifre-1',
+        ])->assertSessionHasNoErrors();
+
+        $account = $employee->fresh()->user;
+        $this->assertSame('can@example.test', $account->email);
+        $this->assertSame($department->id, $account->department_id);
+        $this->assertFalse($account->isAdmin());
+        $this->assertTrue(Hash::check('ilk-sifre-1', $account->password));
+
+        $this->actingAs($admin)->put('/personel/'.$employee->id.'/hesap', [
+            'account_email' => 'can@example.test',
+            'password' => 'yeni-sifre-2',
+            'password_confirmation' => 'yeni-sifre-2',
+        ])->assertSessionHasNoErrors();
+        $this->assertTrue(Hash::check('yeni-sifre-2', $account->fresh()->password));
+        $this->assertSame(1, User::query()->where('email', 'can@example.test')->count());
     }
 
     public function test_an_empty_parent_seat_warns_before_anyone_is_placed(): void
@@ -216,6 +249,43 @@ class LaterPhasesTest extends TestCase
 
         $this->actingAs($staff->user)->get('/bordro')->assertOk()->assertSee('290.00')->assertDontSee('99999');
         $this->actingAs($boss->user)->get('/bordro')->assertOk()->assertSee('99999');
+    }
+
+    public function test_admin_sets_a_leave_balance_and_untracked_leave_is_approved_without_one(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $department = Department::factory()->create();
+        $root = Position::factory()->create(['department_id' => $department->id]);
+        $child = Position::factory()->create(['parent_id' => $root->id, 'department_id' => $department->id]);
+        $boss = $this->seat('Ali', 'Müdür', $root, $department);
+        $staff = $this->seat('Ece', 'Uzman', $child, $department);
+        $annual = Lookup::query()->create(['kind' => 'leave_type', 'name' => 'Yıllık', 'meta' => ['unit' => 'day', 'balance' => true]]);
+        $unpaid = Lookup::query()->create(['kind' => 'leave_type', 'name' => 'Ücretsiz', 'meta' => ['unit' => 'day', 'balance' => false]]);
+
+        $this->actingAs($boss->user)->put('/personel/'.$staff->id.'/izin-bakiye', [
+            'balances' => [$annual->id => ['day' => 14]],
+        ])->assertForbidden();
+        $this->actingAs($admin)->get('/personel/'.$staff->id)->assertOk()->assertSee('Yıllık (gün)')->assertDontSee('Ücretsiz (gün)');
+        $this->actingAs($admin)->put('/personel/'.$staff->id.'/izin-bakiye', [
+            'balances' => [$annual->id => ['day' => 14], $unpaid->id => ['day' => 99]],
+        ])->assertSessionHasNoErrors();
+        $this->assertSame(1, LeaveBalance::query()->count());
+
+        foreach ([$annual, $unpaid] as $type) {
+            $this->actingAs($staff->user)->post('/izin', [
+                'lookup_id' => $type->id,
+                'mode' => 'day',
+                'starts_on' => '2026-10-06',
+                'ends_on' => '2026-10-07',
+            ])->assertRedirect();
+        }
+
+        foreach (LeaveRequest::query()->get() as $leave) {
+            $this->actingAs($boss->user)->put('/izin/'.$leave->id, ['status' => 'approved'])->assertSessionHasNoErrors();
+        }
+
+        $this->assertSame(2, LeaveRequest::query()->where('status', 'approved')->count());
+        $this->assertSame('12.00', LeaveBalance::query()->first()->amount);
     }
 
     public function test_chat_reaches_the_subtree_and_the_direct_manager_only(): void

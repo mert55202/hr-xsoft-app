@@ -27,6 +27,12 @@
         <li class="nav-item"><a class="nav-link" href="#aile">Aile</a></li>
         <li class="nav-item"><a class="nav-link" href="#kayit">Ödül ve uyarı</a></li>
         <li class="nav-item"><a class="nav-link" href="#isg">İş güvenliği</a></li>
+        @if ($canManage)
+            <li class="nav-item"><a class="nav-link" href="#hesap">Hesap</a></li>
+        @endif
+        @if (auth()->user()->isAdmin())
+            <li class="nav-item"><a class="nav-link" href="#izin-bakiye">İzin bakiyesi</a></li>
+        @endif
         @if ($canManage && $employee->user)
             <li class="nav-item"><a class="nav-link" href="#yetki">Yetki</a></li>
         @endif
@@ -38,6 +44,62 @@
             <p class="mb-1">{{ $employee->fullName() }}</p>
             <p class="mb-0 text-secondary">{{ $employee->user ? 'Hesap: '.$employee->user->email : 'Giriş hesabı bağlı değil' }}</p>
         </section>
+
+        @if ($canManage && ! ($employee->user?->isAdmin() && ! auth()->user()->isAdmin()))
+            <section class="app-panel" id="hesap">
+                <h2 class="h5">Giriş hesabı</h2>
+                <p class="text-secondary">{{ $employee->user ? 'Şifreyi boş bırakırsan değişmez.' : 'Personelin sisteme girebilmesi için e-posta ve şifre belirle.' }}</p>
+                <form method="post" action="{{ route('personnel.account', $employee) }}">
+                    @csrf
+                    @method('put')
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label" for="account_email">Giriş e-postası</label>
+                            <input class="form-control @error('account_email') is-invalid @enderror" id="account_email" name="account_email" type="email" value="{{ old('account_email', $employee->user?->email ?? $employee->email) }}" required>
+                            @error('account_email')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="password">{{ $employee->user ? 'Yeni şifre' : 'Şifre' }}</label>
+                            <input class="form-control @error('password') is-invalid @enderror" id="password" name="password" type="password" autocomplete="new-password" @required(! $employee->user)>
+                            @error('password')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="password_confirmation">Şifre tekrar</label>
+                            <input class="form-control" id="password_confirmation" name="password_confirmation" type="password" autocomplete="new-password" @required(! $employee->user)>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary mt-3" type="submit">{{ $employee->user ? 'Hesabı güncelle' : 'Hesap aç' }}</button>
+                </form>
+            </section>
+        @endif
+
+        @if (auth()->user()->isAdmin())
+            <section class="app-panel" id="izin-bakiye">
+                <h2 class="h5">İzin bakiyesi</h2>
+                @if ($leaveTypes->isEmpty())
+                    <p class="text-secondary mb-0">Bakiyeden düşen izin tipi yok. Sözlükten ekleyebilirsin.</p>
+                @else
+                    <p class="text-secondary">Onaylanan izin buradaki bakiyeden düşer. Boş bırakılan satırda bakiye yoktur.</p>
+                    <form method="post" action="{{ route('personnel.leave-balances', $employee) }}">
+                        @csrf
+                        @method('put')
+                        <div class="row g-3">
+                            @foreach ($leaveTypes as $type)
+                                @foreach ($type->leaveUnits() as $unit)
+                                    @php($field = 'balances.'.$type->id.'.'.$unit)
+                                    <div class="col-md-4">
+                                        <label class="form-label" for="balance-{{ $type->id }}-{{ $unit }}">{{ $type->name }} ({{ $unit === 'hour' ? 'saat' : 'gün' }})</label>
+                                        <input class="form-control @error($field) is-invalid @enderror" id="balance-{{ $type->id }}-{{ $unit }}" name="balances[{{ $type->id }}][{{ $unit }}]" inputmode="decimal" value="{{ old($field, $leaveBalances->get($type->id.'-'.$unit)?->amount) }}">
+                                        @error($field)<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                    </div>
+                                @endforeach
+                            @endforeach
+                        </div>
+                        <button class="btn btn-primary mt-3" type="submit">Bakiyeyi kaydet</button>
+                    </form>
+                @endif
+            </section>
+        @endif
 
         <section class="app-panel" id="kimlik">
             <h2 class="h5">Kimlik</h2>

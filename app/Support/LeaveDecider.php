@@ -34,18 +34,21 @@ class LeaveDecider
             return;
         }
 
-        $needed = $leave->mode === 'hour' ? (float) $leave->hours : $leave->dayCount();
-        $balance = LeaveBalance::query()
-            ->where('employee_id', $leave->employee_id)
-            ->where('lookup_id', $leave->lookup_id)
-            ->where('unit', $leave->mode)
-            ->first();
+        if ($leave->lookup?->tracksBalance() ?? true) {
+            $needed = $leave->mode === 'hour' ? (float) $leave->hours : $leave->dayCount();
+            $balance = LeaveBalance::query()
+                ->where('employee_id', $leave->employee_id)
+                ->where('lookup_id', $leave->lookup_id)
+                ->where('unit', $leave->mode)
+                ->first();
 
-        if ($balance === null || (float) $balance->amount < $needed) {
-            throw ValidationException::withMessages(['status' => 'Bakiye yetmiyor.']);
+            if ($balance === null || (float) $balance->amount < $needed) {
+                throw ValidationException::withMessages(['status' => 'Bakiye yetmiyor.']);
+            }
+
+            $balance->update(['amount' => round((float) $balance->amount - $needed, 2)]);
         }
 
-        $balance->update(['amount' => round((float) $balance->amount - $needed, 2)]);
         $leave->update(['status' => 'approved', 'decided_by' => $actor->id]);
 
         if ($leave->employee?->user_id !== null) {

@@ -175,11 +175,14 @@ class DeskController extends Controller
             'kind' => ['required', Rule::in(array_keys(LookupKind::labels()))],
             'name' => ['required', 'string', 'max:160'],
             'unit' => ['nullable', Rule::in(['day', 'hour', 'both'])],
+            'balance' => ['nullable', 'boolean'],
         ]);
         Lookup::query()->create([
             'kind' => $data['kind'],
             'name' => $data['name'],
-            'meta' => $data['kind'] === 'leave_type' ? ['unit' => $data['unit'] ?? 'both'] : null,
+            'meta' => $data['kind'] === 'leave_type'
+                ? ['unit' => $data['unit'] ?? 'both', 'balance' => $request->boolean('balance')]
+                : null,
         ]);
 
         return back();

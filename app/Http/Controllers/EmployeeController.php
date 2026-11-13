@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Enums\UserRole;
 use App\Http\Requests\EmployeeRequest;
 use App\Models\Employee;
 use App\Models\EmployeeMove;
+use App\Models\LeaveBalance;
+use App\Models\Lookup;
 use App\Models\Position;
 use App\Models\User;
 use App\Support\EmployeeAccess;
@@ -14,6 +17,8 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
@@ -90,6 +95,13 @@ class EmployeeController extends Controller
             'secondManagers' => $grandId === null ? collect() : $seated->get($grandId, collect()),
             'visibleIds' => $access->visibleIds(auth()->user()),
             'canManage' => auth()->user()->can('update', $employee),
+            'leaveTypes' => auth()->user()->isAdmin()
+                ? Lookup::query()->where('kind', 'leave_type')->orderBy('name')->get()->filter->tracksBalance()
+                : collect(),
+            'leaveBalances' => LeaveBalance::query()
+                ->where('employee_id', $employee->id)
+                ->get()
+                ->keyBy(fn (LeaveBalance $balance): string => $balance->lookup_id.'-'.$balance->unit),
         ]);
     }
 
@@ -123,6 +135,44 @@ class EmployeeController extends Controller
         return redirect()
             ->route('personnel.show', $employee)
             ->with('status', 'Personel güncellendi.');
+    }
+
+    public function account(Request $request, Employee $employee): RedirectResponse
+    {
+        Gate::authorize('update', $employee);
+        $account = $employee->user;
+        abort_if($account?->isAdmin() && ! $request->user()->isAdmin(), 403);
+
+        $data = $request->validate([
+            'account_email' => ['required', 'email', 'max:160', Rule::unique('users', 'email')->ignore($account)],
+            'password' => [$account === null ? 'required' : 'nullable', 'confirmed', Password::min(8)],
+        ], [], [
+            'account_email' => 'giriş e-postası',
+            'password' => 'şifre',
+        ]);
+
+        $attributes = [
+            'name' => $employee->fullName(),
+            'email' => $data['account_email'],
+        ];
+
+        if (filled($data['password'] ?? null)) {
+            $attributes['password'] = $data['password'];
+        }
+
+        if ($account === null) {
+            $account = User::query()->create($attributes + [
+                'role' => UserRole::Employee,
+                'department_id' => $employee->position?->department_id,
+            ]);
+            $employee->update(['user_id' => $account->id]);
+
+            return back()->with('status', 'Giriş hesabı açıldı.');
+        }
+
+        $account->update($attributes);
+
+        return back()->with('status', 'Giriş hesabı güncellendi.');
     }
 
     public function modules(Request $request, Employee $employee): RedirectResponse

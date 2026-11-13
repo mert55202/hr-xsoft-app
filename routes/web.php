@@ -136,6 +136,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/talep', [DeskController::class, 'storeRequest'])->name('requests.store');
     Route::get('/sozluk', [DeskController::class, 'lookups'])->name('lookups.index');
     Route::post('/sozluk', [DeskController::class, 'storeLookup'])->name('lookups.store');
+    Route::put('/personel/{employee}/izin-bakiye', [LeaveController::class, 'balances'])->name('personnel.leave-balances');
+    Route::put('/personel/{employee}/hesap', [EmployeeController::class, 'account'])->name('personnel.account');
     Route::put('/personel/{employee}/moduller', [EmployeeController::class, 'modules'])->name('personnel.modules');
     Route::post('/personel/{employee}/envanter', [EmployeeRecordController::class, 'storeAsset'])->name('personnel.assets.store');
     Route::post('/personel/{employee}/evrak', [EmployeeRecordController::class, 'storeDocument'])->name('personnel.documents.store');
